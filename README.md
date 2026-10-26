@@ -107,7 +107,7 @@ helm upgrade --install urumi-gateway ./charts/urumi-gateway -n urumi --create-na
   -f ./charts/urumi-gateway/values-k3s.yaml --wait --timeout 10m
 ```
 
-Use the fresh-install WordPress/bootstrap flow, now at production domains. There are no separate production manifests: chart and controller code are the same, configuration changes only. Single-node local-path storage is not highly available. A VPS deployment has not been executed by this bundle's local test run.
+Use the fresh-install WordPress/bootstrap flow, now at production domains. There are no separate production manifests: chart and controller code are the same, configuration changes only. Single-node local-path storage is not highly available. AWS EC2 k3s deployment has been verified; see docs/aws-deployment.md.
 
 ### Upgrade / rollback
 
@@ -136,12 +136,13 @@ Automated tests cover access/revocation, registry/audits, store ownership/quota/
 - Multi-store provisioning: `backend/app/stores.py`, `provisioner.py`, `store_resources.py`, `dashboard/src/Stores.jsx`; live evidence in `docs/current-status.md`.
 - Encrypted upstream credentials, separate controller identity, gateway-only MCP network access, per-store isolation and quotas: see `docs/threat-model.md` and chart templates.
 - Upgrade/rollback procedures: this README and `scripts/upgrade-local.sh`.
-- Not implemented/demonstrated: actual VPS deployment, gateway OAuth, per-tool permissions, tool-search routing, image-based upstream hosting, multi-replica load testing, rate limits or a metrics backend.
+- Not implemented/demonstrated: gateway OAuth, per-tool permissions, tool-search routing, image-based upstream hosting, multi-replica load testing, rate limits or a metrics backend.
 
 API documentation is available at `http://urumi.local:8088/api/docs`; its relative schema/server URLs also support direct gateway port forwarding. Use the unprefixed routes (`/stores`, `/mcp`, `/audit`) shown there; `/api/...` gateway aliases exist for compatibility and are not needed through the dashboard proxy.
 
 Before publishing, rotate any API key previously displayed in terminal captures or chat. Never record the Connect field, Authorization header, one-time key screen or Kubernetes Secret contents in the demo.
-Verified AWS deployment
+### Verified AWS deployment
+
 See [AWS deployment notes](docs/aws-deployment.md) for the tested k3s
 deployment, HTTPS configuration, verification results and limitations.
 Use values-k3s.yaml with values-aws-demo.yaml for this demo environment.
