@@ -141,3 +141,7 @@ Automated tests cover access/revocation, registry/audits, store ownership/quota/
 API documentation is available at `http://urumi.local:8088/api/docs`; its relative schema/server URLs also support direct gateway port forwarding. Use the unprefixed routes (`/stores`, `/mcp`, `/audit`) shown there; `/api/...` gateway aliases exist for compatibility and are not needed through the dashboard proxy.
 
 Before publishing, rotate any API key previously displayed in terminal captures or chat. Never record the Connect field, Authorization header, one-time key screen or Kubernetes Secret contents in the demo.
+Verified AWS deployment
+See [AWS deployment notes](docs/aws-deployment.md) for the tested k3s
+deployment, HTTPS configuration, verification results and limitations.
+Use values-k3s.yaml with values-aws-demo.yaml for this demo environment.

@@ -1,0 +1,26 @@
+imagePullPolicy: IfNotPresent
+
+images:
+  gateway: urumi-gateway:vps1
+  dashboard: urumi-dashboard:vps1
+  mcp: urumi-mcp-service:vps2
+  wordpress: urumi-woocommerce:vps1
+
+ingress:
+  className: traefik
+  host: gateway.52.64.140.210.nip.io
+  storeHost: shop.52.64.140.210.nip.io
+  tlsSecretName: urumi-public-tls
+
+woocommercePublicUrl: https://shop.52.64.140.210.nip.io
+wooSecretName: urumi-woo
+
+llm:
+  secretName: urumi-llm
+
+provisioning:
+  enabled: true
+  baseDomain: 52.64.140.210.nip.io
+  publicPort: ''
+  publicScheme: http
+  ingressNamespace: kube-system
