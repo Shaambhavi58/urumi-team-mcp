@@ -236,6 +236,10 @@ async def woo(method: str, endpoint: str, data: dict | None = None, params: dict
             method,
             request_url + ("?" + urlencode(request_params) if request_params else ""),
             auth=auth,
+            headers={
+                "Host": httpx.URL(os.environ["WOO_PUBLIC_URL"]).netloc.decode(),
+                "X-Forwarded-Proto": httpx.URL(os.environ["WOO_PUBLIC_URL"]).scheme,
+            } if not WOO_URL.startswith("https://") else {},
             json=data,
         )
         if res.is_error:
