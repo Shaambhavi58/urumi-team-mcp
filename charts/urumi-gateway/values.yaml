@@ -1,0 +1,47 @@
+namespace: urumi
+imagePullPolicy: IfNotPresent
+images:
+  gateway: urumi-gateway:final1
+  dashboard: urumi-dashboard:final1
+  mcp: urumi-mcp-service:final1
+  wordpress: urumi-woocommerce:final1
+  postgres: postgres:16-alpine
+  mariadb: mariadb:11.4
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: 700m, memory: 512Mi}
+persistence:
+  storageClass: ''
+  gatewaySize: 2Gi
+  mariadbSize: 5Gi
+  wordpressSize: 8Gi
+ingress:
+  enabled: true
+  className: traefik
+  host: urumi.local
+  storeHost: shop.urumi.local
+  tlsSecretName: ''
+woocommercePublicUrl: http://shop.urumi.local:8088
+llm:
+  baseUrl: https://api.groq.com/openai/v1
+  model: openai/gpt-oss-120b
+  secretName: urumi-llm
+wooSecretName: urumi-woo
+# Existing credentials are retained via Helm lookup. Empty values generate fresh credentials only on first install.
+secrets:
+  postgresPassword: ''
+  mariadbPassword: ''
+  mariadbRootPassword: ''
+  encryptionKey: ''
+  wooConsumerKey: ''
+  wooConsumerSecret: ''
+  openaiApiKey: ''
+provisioning:
+  enabled: false
+  baseDomain: 127.0.0.1.nip.io
+  publicPort: '8088'
+  publicScheme: http
+  ingressNamespace: ingress-system
+  maxStoresPerUser: 3
+  timeoutSeconds: 900
+  concurrency: 2

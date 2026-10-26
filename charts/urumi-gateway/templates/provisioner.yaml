@@ -1,0 +1,111 @@
+{{- if .Values.provisioning.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: urumi-provisioner, namespace: {{ .Values.namespace }}}
+---
+# Only the separate controller has Kubernetes credentials; the public API does not.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: {{ .Release.Name }}-{{ .Values.namespace }}-provisioner}
+rules:
+  - apiGroups: ['']
+    resources: [namespaces]
+    verbs: [get, create, delete]
+  - apiGroups: ['']
+    resources: [persistentvolumes]
+    verbs: [get, list]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list]
+  - apiGroups: ['']
+    resources: [secrets, services, persistentvolumeclaims, resourcequotas, limitranges]
+    verbs: [get, create, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, create, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, create, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: {{ .Release.Name }}-{{ .Values.namespace }}-provisioner}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ .Release.Name }}-{{ .Values.namespace }}-provisioner}
+subjects:
+  - {kind: ServiceAccount, name: urumi-provisioner, namespace: {{ .Values.namespace }}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: provisioner, namespace: {{ .Values.namespace }}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: provisioner}}
+  template:
+    metadata: {labels: {app: provisioner}}
+    spec:
+      serviceAccountName: urumi-provisioner
+      initContainers:
+        - name: wait-gateway-schema
+          image: {{ .Values.images.gateway }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [python, -c]
+          args:
+            - |
+              import time
+              import httpx
+              while True:
+                  try:
+                      response = httpx.get("http://gateway:8000/health/ready", timeout=5)
+                      if response.status_code == 200:
+                          break
+                  except httpx.HTTPError:
+                      pass
+                  time.sleep(3)
+          securityContext: {runAsNonRoot: true, runAsUser: 10001, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+      containers:
+        - name: provisioner
+          image: {{ .Values.images.gateway }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [python, -m, app.provisioner]
+          envFrom: [{configMapRef: {name: urumi-provisioning}}]
+          env:
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: urumi-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: DATABASE_URL, value: 'postgresql://urumi:$(POSTGRES_PASSWORD)@postgres:5432/urumi'}
+            - {name: APP_ENCRYPTION_KEY, valueFrom: {secretKeyRef: {name: urumi-secrets, key: APP_ENCRYPTION_KEY}}}
+          startupProbe:
+            exec: {command: [python, -c, "import pathlib; assert pathlib.Path('/tmp/provisioner-heartbeat').exists()"]}
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec: {command: [python, -c, "import pathlib,time; assert time.time()-pathlib.Path('/tmp/provisioner-heartbeat').stat().st_mtime < 60"]}
+            periodSeconds: 10
+          livenessProbe:
+            exec: {command: [python, -c, "import pathlib,time; assert time.time()-pathlib.Path('/tmp/provisioner-heartbeat').stat().st_mtime < 90"]}
+            periodSeconds: 20
+          securityContext: {runAsNonRoot: true, runAsUser: 10001, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: urumi-provisioning, namespace: {{ .Values.namespace }}}
+data:
+  STORE_PROVISIONING_ENABLED: {{ .Values.provisioning.enabled | quote }}
+  STORE_BASE_DOMAIN: {{ .Values.provisioning.baseDomain | quote }}
+  STORE_PUBLIC_PORT: {{ .Values.provisioning.publicPort | quote }}
+  STORE_PUBLIC_SCHEME: {{ .Values.provisioning.publicScheme | quote }}
+  MAX_STORES_PER_USER: {{ .Values.provisioning.maxStoresPerUser | quote }}
+  STORE_TIMEOUT_SECONDS: {{ .Values.provisioning.timeoutSeconds | quote }}
+  STORE_CONCURRENCY: {{ .Values.provisioning.concurrency | quote }}
+  STORE_WORDPRESS_IMAGE: {{ .Values.images.wordpress | quote }}
+  STORE_MCP_IMAGE: {{ .Values.images.mcp | quote }}
+  STORE_DB_IMAGE: {{ .Values.images.mariadb | quote }}
+  STORE_IMAGE_PULL_POLICY: {{ .Values.imagePullPolicy | quote }}
+  STORE_STORAGE_CLASS: {{ .Values.persistence.storageClass | quote }}
+  STORE_INGRESS_CLASS: {{ .Values.ingress.className | quote }}
+  INGRESS_NAMESPACE: {{ .Values.provisioning.ingressNamespace | quote }}
+  GATEWAY_NAMESPACE: {{ .Values.namespace | quote }}

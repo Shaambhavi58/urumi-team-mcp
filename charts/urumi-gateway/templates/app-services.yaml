@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway, namespace: {{ .Values.namespace }} }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata: { labels: { app: gateway } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: gateway
+          image: {{ .Values.images.gateway }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports: [{ containerPort: 8000 }]
+          envFrom: [{ configMapRef: { name: urumi-config } }, { configMapRef: { name: urumi-provisioning } }]
+          env:
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: urumi-secrets, key: POSTGRES_PASSWORD } } }
+            - { name: DATABASE_URL, value: "postgresql://urumi:$(POSTGRES_PASSWORD)@postgres:5432/urumi" }
+            - { name: OPENAI_API_KEY, valueFrom: { secretKeyRef: { name: {{ .Values.llm.secretName }}, key: OPENAI_API_KEY } } }
+            - { name: OPENAI_MODEL, value: {{ .Values.llm.model | quote }} }
+            - { name: OPENAI_BASE_URL, value: {{ .Values.llm.baseUrl | quote }} }
+            - { name: APP_ENCRYPTION_KEY, valueFrom: { secretKeyRef: { name: urumi-secrets, key: APP_ENCRYPTION_KEY } } }
+          readinessProbe: { httpGet: { path: /health/ready, port: 8000 }, initialDelaySeconds: 10, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8000 }, initialDelaySeconds: 10, periodSeconds: 15 }
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: false, runAsNonRoot: true, runAsUser: 10001, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: gateway, namespace: {{ .Values.namespace }} }
+spec: { type: ClusterIP, selector: { app: gateway }, ports: [{ port: 8000, targetPort: 8000 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: dashboard, namespace: {{ .Values.namespace }} }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: dashboard } }
+  template:
+    metadata: { labels: { app: dashboard } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: dashboard
+          image: {{ .Values.images.dashboard }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports: [{ containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /, port: 8080 }, initialDelaySeconds: 3 }
+          livenessProbe: { httpGet: { path: /, port: 8080 }, initialDelaySeconds: 5 }
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: dashboard, namespace: {{ .Values.namespace }} }
+spec: { type: ClusterIP, selector: { app: dashboard }, ports: [{ port: 8080, targetPort: 8080 }] }
+{{- range $name := list "woocommerce" "inventory" "shipping" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: {{ $name }}-mcp, namespace: {{ $.Values.namespace }} }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: {{ $name }}-mcp } }
+  template:
+    metadata: { labels: { app: {{ $name }}-mcp, tier: upstream } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mcp
+          image: {{ $.Values.images.mcp }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - { name: SERVICE_NAME, value: {{ $name | quote }} }
+            - name: WOO_PUBLIC_URL
+              value: {{ $.Values.woocommercePublicUrl | quote }}
+            - { name: WOO_URL, valueFrom: { configMapKeyRef: { name: urumi-config, key: WOO_URL } } }
+            - { name: WOO_CONSUMER_KEY, valueFrom: { secretKeyRef: { name: {{ if eq $name "woocommerce" }}{{ $.Values.wooSecretName }}{{ else }}urumi-secrets{{ end }}, key: WOO_CONSUMER_KEY } } }
+            - { name: WOO_CONSUMER_SECRET, valueFrom: { secretKeyRef: { name: {{ if eq $name "woocommerce" }}{{ $.Values.wooSecretName }}{{ else }}urumi-secrets{{ end }}, key: WOO_CONSUMER_SECRET } } }
+          ports: [{ containerPort: 8010 }]
+          readinessProbe: { httpGet: { path: /health/live, port: 8010 }, initialDelaySeconds: 5 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8010 }, initialDelaySeconds: 10 }
+          resources: {{ toYaml $.Values.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: {{ $name }}-mcp, namespace: {{ $.Values.namespace }} }
+spec: { type: ClusterIP, selector: { app: {{ $name }}-mcp }, ports: [{ port: 8010, targetPort: 8010 }] }
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: wordpress, namespace: {{ .Values.namespace }} }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: wordpress } }
+  template:
+    metadata: { labels: { app: wordpress } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: wordpress
+          image: {{ .Values.images.wordpress }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - { name: WORDPRESS_DB_HOST, value: wordpress-db:3306 }
+            - { name: WORDPRESS_DB_NAME, value: wordpress }
+            - { name: WORDPRESS_DB_USER, value: wp }
+            - { name: WORDPRESS_DB_PASSWORD, valueFrom: { secretKeyRef: { name: urumi-secrets, key: MARIADB_PASSWORD } } }
+          ports: [{ containerPort: 80 }]
+          startupProbe:
+            httpGet: { path: /wp-login.php, port: 80 }
+            timeoutSeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /wp-login.php, port: 80 }
+            timeoutSeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 80 }
+            timeoutSeconds: 3
+            periodSeconds: 20
+            failureThreshold: 3
+          volumeMounts: [{ name: content, mountPath: /var/www/html/wp-content }]
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: content
+          persistentVolumeClaim: { claimName: wordpress-content }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: wordpress-content, namespace: {{ .Values.namespace }} }
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass | quote }}
+  {{- end }}
+  resources: { requests: { storage: {{ .Values.persistence.wordpressSize }} } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: wordpress, namespace: {{ .Values.namespace }} }
+spec: { type: ClusterIP, selector: { app: wordpress }, ports: [{ port: 80, targetPort: 80 }] }

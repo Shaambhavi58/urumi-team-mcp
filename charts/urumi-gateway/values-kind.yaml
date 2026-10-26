@@ -1,0 +1,8 @@
+# Keep local settings in values; no real credentials here.
+namespace: urumi
+imagePullPolicy: IfNotPresent
+ingress:
+  className: traefik
+  host: urumi.local
+  storeHost: shop.urumi.local
+woocommercePublicUrl: http://shop.urumi.local:8088

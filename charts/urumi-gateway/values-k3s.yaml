@@ -1,0 +1,20 @@
+# Replace example domains and registry image tags before using.
+ingress:
+  className: traefik
+  host: gateway.example.com
+  storeHost: shop.example.com
+woocommercePublicUrl: http://shop.example.com
+persistence:
+  storageClass: local-path
+imagePullPolicy: Always
+images:
+  gateway: registry.example.com/urumi-gateway:final1
+  dashboard: registry.example.com/urumi-dashboard:final1
+  mcp: registry.example.com/urumi-mcp-service:final1
+  wordpress: registry.example.com/urumi-woocommerce:final1
+provisioning:
+  enabled: true
+  baseDomain: stores.example.com
+  publicPort: ''
+  publicScheme: http
+  ingressNamespace: kube-system

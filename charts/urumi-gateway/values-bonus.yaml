@@ -1,0 +1,8 @@
+provisioning:
+  enabled: true
+  baseDomain: 127.0.0.1.nip.io
+  publicPort: '8088'
+  ingressNamespace: ingress-system
+  maxStoresPerUser: 3
+  timeoutSeconds: 900
+  concurrency: 2

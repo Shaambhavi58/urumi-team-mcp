@@ -1,0 +1,42 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dashboard-gateway
+  namespace: {{ .Values.namespace }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tlsSecretName }}
+  tls:
+    - secretName: {{ .Values.ingress.tlsSecretName }}
+      hosts: [{{ .Values.ingress.host | quote }}]
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: dashboard, port: { number: 8080 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: dashboard, port: { number: 8080 } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: woocommerce-store, namespace: {{ .Values.namespace }} }
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tlsSecretName }}
+  tls:
+    - secretName: {{ .Values.ingress.tlsSecretName }}
+      hosts: [{{ .Values.ingress.storeHost | default (printf "store.%s" .Values.ingress.host) | quote }}]
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.storeHost | default (printf "store.%s" .Values.ingress.host) }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: wordpress, port: { number: 80 } } }
+{{- end }}
